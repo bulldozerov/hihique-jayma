@@ -1,12 +1,11 @@
-"""Convert a Markdown specification to JSON blocks with source line ranges."""
+"""Read Markdown and PDF specifications as blocks with source locations."""
 
 import argparse
 import json
+import re
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
-
-from markdown_it import MarkdownIt
 
 
 @dataclass
@@ -18,10 +17,60 @@ class DocumentBlock:
     end_line: int
     text: str
     source: str
+    page: int | None = None
+
+    def to_dict(self) -> dict:
+        data = asdict(self)
+        if self.page is None:
+            del data["page"]
+        return data
+
+
+def read_document(path: Path) -> list[DocumentBlock]:
+    if path.suffix.lower() == ".md":
+        return parse_markdown(path.read_text(encoding="utf-8-sig"))
+    if path.suffix.lower() == ".pdf":
+        return parse_pdf(path)
+    raise ValueError("Expected a .md or .pdf input file")
+
+
+def parse_pdf(path: Path) -> list[DocumentBlock]:
+    from pypdf import PdfReader
+    from pypdf.errors import PyPdfError
+
+    blocks: list[DocumentBlock] = []
+    try:
+        with path.open("rb") as stream:
+            document = PdfReader(stream)
+            for page_number, page in enumerate(document.pages, start=1):
+                text = page.extract_text(extraction_mode="layout")
+                # Keep adjacent lines together, including wrapped table cells.
+                for match in re.finditer(r"[^\n]*\S[^\n]*(?:\n[^\n]*\S[^\n]*)*", text):
+                    source = match.group()
+                    start_line = text.count("\n", 0, match.start()) + 1
+                    blocks.append(
+                        DocumentBlock(
+                            id=f"B{len(blocks) + 1:03d}",
+                            kind="pdf_text",
+                            section=[],
+                            start_line=start_line,
+                            end_line=start_line + source.count("\n"),
+                            text=source,
+                            source=source,
+                            page=page_number,
+                        )
+                    )
+    except PyPdfError as error:
+        raise ValueError(f"Could not read PDF: {error}") from error
+    if not blocks:
+        raise ValueError("PDF has no extractable text. Use a PDF with a text layer.")
+    return blocks
 
 
 def parse_markdown(markdown: str) -> list[DocumentBlock]:
     """Return blocks in source order, with one-based inclusive line ranges."""
+    from markdown_it import MarkdownIt
+
     markdown = markdown.replace("\r\n", "\n").replace("\r", "\n")
     lines = markdown.split("\n")
     tokens = MarkdownIt("commonmark").enable("table").parse(markdown)
@@ -88,23 +137,21 @@ def parse_markdown(markdown: str) -> list[DocumentBlock]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("input", type=Path, help="Markdown specification")
+    parser.add_argument("input", type=Path, help="Markdown or PDF specification")
     parser.add_argument("--output", type=Path, help="Write JSON to this file")
     args = parser.parse_args()
-    if args.input.suffix.lower() != ".md":
-        parser.error("Expected a .md input file")
     if args.output and args.output.resolve() == args.input.resolve():
         parser.error("The output file must differ from the input file")
 
     try:
-        blocks = parse_markdown(args.input.read_text(encoding="utf-8-sig"))
-        output = json.dumps([asdict(block) for block in blocks], ensure_ascii=False, indent=2)
+        blocks = read_document(args.input)
+        output = json.dumps([block.to_dict() for block in blocks], ensure_ascii=False, indent=2)
         if args.output:
             args.output.write_text(output + "\n", encoding="utf-8")
         else:
             sys.stdout.reconfigure(encoding="utf-8")
             print(output)
-    except (OSError, UnicodeError) as error:
+    except (OSError, ValueError) as error:
         parser.exit(1, f"{error}\n")
 
 

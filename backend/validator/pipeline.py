@@ -1,6 +1,5 @@
-"""Run local and document-wide reviews over Markdown source blocks."""
+"""Run local and document-wide reviews over source blocks."""
 
-from dataclasses import asdict
 import json
 from typing import Literal, Protocol, TypeVar
 
@@ -38,6 +37,7 @@ class SetFinding(BaseModel):
     severity: Severity
     requirement_ids: list[str]
     block_ids: list[str] = Field(min_length=1)
+    conflicting_quotes: list[str] = Field(default_factory=list)
     explanation: str = Field(min_length=1)
 
 
@@ -55,8 +55,10 @@ LOCAL_PROMPT = """Выдели все требования из ТЗ и пров
 
 SET_PROMPT = """Проверь ТЗ целиком. Сопоставь бизнес-правила, критерии приёмки,
 данные, интерфейс и API. Ищи противоречия, пробелы и дубли. Для противоречия
-укажи минимум два разных исходных блока и опиши сценарий, где правила дают
-разные результаты. Для пробела укажи, какое поведение нужно определить и почему,
+опиши сценарий, где правила дают разные результаты. Укажи ID обоих блоков,
+если правила в разных блоках. Если правила в одном блоке, укажи его ID
+и две разные дословные цитаты из него в conflicting_quotes.
+Для пробела укажи, какое поведение нужно определить и почему,
 со ссылкой на блок, который задаёт контекст. Для связанных требований используй
 только переданные ID. Ссылайся на исходные блоки, даже если требований в них
 нет в списке. Не дублируй замечания по формулировке одного требования. Пиши по-русски."""
@@ -69,7 +71,7 @@ DATA_NOTE = (
 
 def run_review(blocks: list[DocumentBlock], reviewer: Reviewer) -> dict:
     if not blocks:
-        raise ValueError("No Markdown blocks to review")
+        raise ValueError("No source blocks to review")
 
     sources = {block.id: block for block in blocks}
     block_data = [
@@ -100,6 +102,8 @@ def run_review(blocks: list[DocumentBlock], reviewer: Reviewer) -> dict:
     whole = reviewer.request(
         "document review", f"{SET_PROMPT}\n{DATA_NOTE}\n{payload}", SetReview
     )
+    document_findings = []
+    review_warnings = []
     for finding in whole.findings:
         evidence = set(finding.block_ids)
         unknown_blocks = evidence - sources.keys()
@@ -109,16 +113,31 @@ def run_review(blocks: list[DocumentBlock], reviewer: Reviewer) -> dict:
                 f"document review: unknown block IDs {sorted(unknown_blocks)}, "
                 f"unknown requirement IDs {sorted(unknown_requirements)}"
             )
-        if finding.kind == "contradiction" and len(evidence) < 2:
-            raise ValueError("document review: a contradiction needs two source blocks")
         referenced_blocks.update(evidence)
+        if finding.kind == "contradiction" and len(evidence) == 1:
+            block_id = finding.block_ids[0]
+            block_text = " ".join(sources[block_id].text.split())
+            quotes = [" ".join(quote.split()) for quote in finding.conflicting_quotes]
+            if (
+                len(quotes) != 2
+                or not all(quote and quote in block_text for quote in quotes)
+                or quotes[0] in quotes[1]
+                or quotes[1] in quotes[0]
+            ):
+                review_warnings.append(
+                    f"Противоречие в {block_id} не подтверждено двумя цитатами: "
+                    f"{finding.explanation}"
+                )
+                continue
+        document_findings.append(finding.model_dump(exclude_defaults=True))
 
     return {
         "requirements": [
             {"id": rid, **req.model_dump()} for rid, req in requirements.items()
         ],
-        "document_findings": whole.model_dump()["findings"],
+        "document_findings": document_findings,
+        **({"review_warnings": review_warnings} if review_warnings else {}),
         "evidence": {
-            block.id: asdict(block) for block in blocks if block.id in referenced_blocks
+            block.id: block.to_dict() for block in blocks if block.id in referenced_blocks
         },
     }
