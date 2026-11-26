@@ -1,0 +1,84 @@
+﻿:root {
+  color-scheme: dark;
+  --ground: #100915;
+  --ink: #f9effb;
+  --muted: #c8b7cb;
+  --pink: #ff4bbe;
+  --violet: #a963ff;
+  --line: #63455e;
+  font: 100%/1.5 "Segoe UI", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; min-height: 100vh; isolation: isolate; background: var(--ground); color: var(--ink); }
+#texture {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  image-rendering: pixelated;
+}
+.upload-layout { min-height: 100svh; display: grid; place-items: center; padding: 44px 22px; }
+.window {
+  width: min(100%, 665px);
+  border: 2px solid var(--ink);
+  background: #150e19;
+  box-shadow: 9px 9px 0 #100915, 12px 12px 0 var(--violet);
+}
+.window-bar {
+  display: flex; align-items: center; gap: 14px; padding: 0 13px;
+  height: 30px; color: #160c1d; background: var(--pink);
+  border-bottom: 2px solid var(--ink);
+}
+.window-mark { font-size: 1.25rem; line-height: 1; }
+.window-stripes { flex: 1; height: 8px; background: repeating-linear-gradient(0deg,#240c29 0 1px,transparent 1px 3px); }
+.window-body { padding: clamp(19px, 4vw, 36px); }
+h1, h2 { line-height: 1.08; letter-spacing: -.045em; }
+h1 { margin: 0 0 24px; font-size: clamp(1.9rem, 5.3vw, 3rem); font-weight: 800; }
+.drop {
+  position: relative; display: grid; min-height: 185px; place-content: center; justify-items: center;
+  gap: 8px; padding: 18px; text-align: center; border: 2px dashed #9e73b1;
+  background: radial-gradient(#713d805e 1px, transparent 1px) 0 0 / 6px 6px, #1c1224;
+  cursor: pointer;
+}
+.drop:hover, .drop:focus-within, .drop.drag { border-color: var(--pink); background-color: #32173b; }
+.drop input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.drop strong { overflow-wrap: anywhere; max-width: 100%; font-size: 1.12rem; }
+.upload-mark { font-size: 1.45rem; line-height: 1; color: var(--pink); }
+#file-hint, #status { color: var(--muted); font-size: .9375rem; }
+#file-hint u { color: #ff99d9; }
+.action-row, .result, .report-actions, .contents { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.action-row { justify-content: space-between; margin-top: 18px; }
+#status { margin: 0; flex: 1 1 210px; }
+button, .control {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 44px;
+  padding: 9px 15px; color: var(--ink); background: #211729; border: 1px solid #b489b7;
+  font: inherit; font-weight: 700; text-decoration: none; cursor: pointer;
+}
+.primary { background: var(--pink); border-color: var(--pink); color: #14091a; }
+button:disabled { opacity: .55; cursor: default; }
+button:not(:disabled):hover, .control:hover { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+:focus-visible { outline: 2px solid #e1fc8a; outline-offset: 4px; }
+progress { width: 100%; margin-top: 14px; accent-color: var(--pink); }
+.result { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 18px; }
+.report-layout { width: min(1120px, calc(100% - 40px)); margin: 28px auto 64px; border-inline: 1px solid var(--line); background: #150e19; }
+.report-head { border-top: 6px solid var(--pink); padding: clamp(18px, 4vw, 42px); background: #21132a; }
+.report-actions { justify-content: space-between; margin-bottom: 25px; }
+.report-head h1 { margin-bottom: 9px; }
+#summary { margin: 0; color: var(--muted); overflow-wrap: anywhere; }
+.contents { margin-top: 20px; gap: 8px 18px; }
+.contents a { color: #ff9ddd; text-underline-offset: 4px; }
+.report-section { padding: clamp(18px, 4vw, 42px); border-top: 1px solid var(--line); scroll-margin-top: 16px; overflow-wrap: anywhere; }
+.report-section h2 { font-size: clamp(1.45rem, 3.2vw, 2rem); margin: 0 0 16px; }
+.report-section details, .finding { padding: 13px 0; border-bottom: 1px solid var(--line); }
+.report-section summary { cursor: pointer; font-weight: 650; }
+.report-section h3 { color: #ff9ddd; margin: 0; font-size: 1rem; }
+.report-section p:last-child { margin-bottom: 0; }
+.report-section blockquote { margin: 10px 0; padding: 8px 12px; border-left: 3px solid var(--violet); background: #211729; color: var(--muted); white-space: pre-wrap; }
+.report-page #texture { opacity: .65; }
+@media (max-width: 540px) {
+  .upload-layout { padding: 28px 18px; }
+  .action-row button { width: 100%; }
+  .report-layout { width: calc(100% - 20px); margin-top: 10px; }
+}

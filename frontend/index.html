@@ -1,0 +1,37 @@
+﻿<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Проверка требований</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="demo-report.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body class="upload-page">
+  <canvas id="texture" aria-hidden="true"></canvas>
+  <main class="upload-layout">
+    <section class="window upload-window" aria-labelledby="title">
+      <header class="window-bar" aria-hidden="true"><span class="window-mark">▪ ▪ ▪</span><span class="window-stripes"></span></header>
+      <div class="window-body">
+        <h1 id="title">Проверка требований</h1>
+        <label class="drop" id="drop">
+          <input id="file" type="file" aria-describedby="file-hint">
+          <span class="upload-mark" aria-hidden="true">＋</span>
+          <strong id="file-name">Перетащите документ</strong>
+          <span id="file-hint">или <u>выберите файл</u> · любой формат</span>
+        </label>
+        <div class="action-row">
+          <p id="status" role="status">После загрузки можно открыть пример отчёта.</p>
+          <button id="run" class="primary" disabled>Запустить проверку</button>
+        </div>
+        <progress id="progress" aria-label="Подготовка отчёта" hidden></progress>
+        <section id="result" class="result" hidden aria-label="Готовый отчёт">
+          <a class="primary control" href="report.html">Открыть отчёт</a>
+          <button id="download">Скачать .md</button>
+        </section>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
