@@ -6,10 +6,11 @@ build-backend = "setuptools.build_meta"
 name = "hihique-requirements-validator"
 version = "0.1.0"
 requires-python = ">=3.10"
-dependencies = ["markdown-it-py==4.0.0"]
+dependencies = ["markdown-it-py==4.0.0", "google-genai>=2,<3", "httpx>=0.28,<1", "pydantic>=2,<3", "python-dotenv>=1,<2"]
 
 [project.scripts]
 parse-requirements = "validator.readers:main"
+review-requirements = "validator.cli:main"
 
 [tool.setuptools]
 packages = ["validator"]
