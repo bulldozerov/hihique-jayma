@@ -31,3 +31,13 @@ review-requirements docs/requirements.md --max-blocks 20 --output review-partial
 
 Если документ был обрезан, поле `review_scope` в JSON содержит число
 проверенных блоков, общее число блоков и номер последней включённой страницы для PDF или строки для Markdown.
+
+## Веб-интерфейс
+
+Из корня репозитория после установки зависимостей и настройки `.env`:
+
+```powershell
+python -m uvicorn validator.api:app --host 127.0.0.1 --port 8000
+```
+
+На http://127.0.0.1:8000/ доступен демонстрационный интерфейс. Для проверки через Gemini отправьте PDF с текстовым слоем или Markdown в `POST /api/reviews` как поле `file` формы `multipart/form-data`.

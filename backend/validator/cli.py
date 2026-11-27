@@ -30,7 +30,7 @@ def main() -> None:
 
     load_dotenv(args.env_file)
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    model = os.getenv("GEMINI_MODEL", "gemini-4-hydrogen").strip()
+    model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
     if not api_key or not model:
         parser.error("Set GEMINI_API_KEY and GEMINI_MODEL in .env or the environment")
 

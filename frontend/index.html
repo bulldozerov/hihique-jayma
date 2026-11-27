@@ -1,37 +1,58 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Проверка требований</title>
+  <title>Проверка требований · hihique // jayma</title>
   <link rel="stylesheet" href="styles.css">
   <script src="demo-report.js" defer></script>
+  <script src="pdf-export.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body class="upload-page">
-  <canvas id="texture" aria-hidden="true"></canvas>
   <main class="upload-layout">
-    <section class="window upload-window" aria-labelledby="title">
-      <header class="window-bar" aria-hidden="true"><span class="window-mark">▪ ▪ ▪</span><span class="window-stripes"></span></header>
-      <div class="window-body">
-        <h1 id="title">Проверка требований</h1>
-        <label class="drop" id="drop">
-          <input id="file" type="file" aria-describedby="file-hint">
-          <span class="upload-mark" aria-hidden="true">＋</span>
-          <strong id="file-name">Перетащите документ</strong>
-          <span id="file-hint">или <u>выберите файл</u> · любой формат</span>
-        </label>
-        <div class="action-row">
-          <p id="status" role="status">После загрузки можно открыть пример отчёта.</p>
-          <button id="run" class="primary" disabled>Запустить проверку</button>
-        </div>
+    <section class="scene" aria-labelledby="title">
+      <div class="art art-base" aria-hidden="true"></div>
+      <div class="art art-left" aria-hidden="true"></div>
+      <div class="art art-right" aria-hidden="true"></div>
+      <div class="art art-run" aria-hidden="true"></div>
+      <p class="wordmark">hihique <span>//</span> jayma</p>
+      <h1 id="title" class="sr-only">Проверка требований</h1>
+      <p class="sr-only">Загрузите ТЗ, чтобы найти пробелы и противоречия.</p>
+      <label class="drop" id="drop">
+        <input id="file" type="file" aria-labelledby="upload-label" aria-describedby="file-hint">
+        <span id="upload-label" class="sr-only">Перетащите файл или выберите его</span>
+        <span id="file-hint" class="sr-only">PDF или Markdown</span>
+        <strong id="file-name" hidden></strong>
+      </label>
+      <button id="run" class="run" hidden disabled><span class="sr-only">Запустить проверку</span></button>
+    </section>
+    <div class="upload-tail">
+      <div class="tail-pattern tail-pattern-left" aria-hidden="true">
+        <span class="tail-icon"></span><span class="tail-icon"></span>
+        <span class="tail-icon"></span><span class="tail-icon"></span>
+        <span class="tail-icon"></span><span class="tail-icon"></span>
+        <span class="tail-icon"></span><span class="tail-icon"></span>
+        <span class="tail-icon"></span><span class="tail-icon"></span>
+        <span class="tail-crosses"></span>
+      </div>
+      <div class="tail-pattern tail-pattern-right" aria-hidden="true">
+        <span class="tail-waves"></span><span class="tail-green-stripes"></span><span class="tail-crosses"></span>
+      </div>
+      <div class="upload-feedback">
+        <p id="status" role="status"></p>
         <progress id="progress" aria-label="Подготовка отчёта" hidden></progress>
         <section id="result" class="result" hidden aria-label="Готовый отчёт">
-          <a class="primary control" href="report.html">Открыть отчёт</a>
-          <button id="download">Скачать .md</button>
+          <a class="primary control" href="report.html">Смотреть на сайте</a>
+          <button data-download="pdf">Скачать PDF</button>
+          <button data-download="md">Скачать Markdown</button>
         </section>
       </div>
-    </section>
+      <footer class="contact-bar" aria-label="Контакты">
+        <a href="mailto:ashim.burabaev@gmail.com">ashim.burabaev@gmail.com</a>
+        <a href="https://github.com/bulldozerov">github.com/bulldozerov</a>
+      </footer>
+    </div>
   </main>
 </body>
 </html>

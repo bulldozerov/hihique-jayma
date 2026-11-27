@@ -3,21 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Отчёт о проверке</title>
+  <title>Отчёт о проверке · hihique // jayma</title>
   <link rel="stylesheet" href="styles.css">
   <script src="demo-report.js" defer></script>
+  <script src="pdf-export.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body class="report-page">
-  <canvas id="texture" aria-hidden="true"></canvas>
+  <div class="report-art" aria-hidden="true"></div>
   <main class="report-layout">
     <header class="report-head">
+      <p class="wordmark">hihique <span>//</span> jayma</p>
       <div class="report-actions">
         <a href="index.html" class="control">К загрузке</a>
-        <button id="download" class="primary">Скачать .md</button>
+        <div class="downloads">
+          <button class="primary" data-download="pdf">Скачать PDF</button>
+          <button data-download="md">Скачать Markdown</button>
+        </div>
       </div>
       <h1>Отчёт о проверке</h1>
       <p id="summary"></p>
+      <p id="status" role="status"></p>
       <nav class="contents" aria-label="Разделы отчёта">
         <a href="#passport">Паспорт</a>
         <a href="#findings">Замечания</a>

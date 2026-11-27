@@ -21,9 +21,13 @@ function selectFile(file) {
   if (!file) return;
   selectedFile = file;
   currentReview = undefined;
-  byId("file-name").textContent = file.name;
-  status.textContent = "Файл выбран. Откроется пример готового отчёта.";
+  sessionStorage.removeItem("requirementsReview");
+  const fileName = byId("file-name");
+  fileName.textContent = file.name;
+  fileName.hidden = false;
+  status.textContent = "Файл выбран. Запустите проверку.";
   result.hidden = true;
+  run.hidden = false;
   run.disabled = false;
 }
 
@@ -43,10 +47,15 @@ drop?.addEventListener("drop", (event) => {
   if (!fileInput.disabled) selectFile(event.dataTransfer.files[0]);
 });
 
-// Replace this adapter with the backend request when the API is available.
-async function runReview(_file) {
-  await new Promise((resolve) => setTimeout(resolve, 850));
-  return globalThis.demoReport;
+async function runReview(file) {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch("/api/reviews", { method: "POST", body: form });
+  if (!response.ok) {
+    const error = await response.json().catch(() => null);
+    throw new Error(typeof error?.detail === "string" ? error.detail : "Не удалось проверить файл.");
+  }
+  return response.json();
 }
 
 function counts(review) {
@@ -62,11 +71,14 @@ run?.addEventListener("click", async () => {
   result.hidden = true;
   status.textContent = "Подготавливаем отчёт…";
   try {
-    currentReview = await runReview(selectedFile);
+    const review = await runReview(selectedFile);
+    sessionStorage.setItem("requirementsReview", JSON.stringify(review));
+    currentReview = review;
     result.hidden = false;
-    status.textContent = "Отчёт готов к просмотру.";
-  } catch {
-    status.textContent = "Не удалось подготовить отчёт. Повторите запуск.";
+    status.textContent = "Отчёт готов.";
+    result.scrollIntoView({ block: "nearest" });
+  } catch (error) {
+    status.textContent = error.message;
   } finally {
     progress.hidden = true;
     fileInput.disabled = false;
@@ -76,6 +88,13 @@ run?.addEventListener("click", async () => {
 
 function findingLabel(finding) {
   return `${severity[finding.severity]} · ${kinds[finding.kind]}`;
+}
+
+const scene = document.querySelector(".scene");
+if (scene) {
+  const settle = () => scene.classList.add("settled");
+  window.addEventListener("pointermove", settle, { once: true });
+  scene.addEventListener("focusin", settle, { once: true });
 }
 
 function sources(review, ids) {
@@ -89,7 +108,6 @@ function sources(review, ids) {
 
 function passport(review) {
   return [
-    "Пример по сохранённому прогону для requirements.pdf.",
     `Документ — ${review.document}`,
     `Модель — ${review.model}`,
     `Дата прогона — ${review.run_date ?? "не записана в исходном JSON"}`,
@@ -98,7 +116,7 @@ function passport(review) {
 }
 
 function verdict() {
-  return "Готовность к разработке и тестированию по сохранённому прогону не определена. Сначала сверьте критичные замечания с источником.";
+  return "Готовность к разработке и тестированию требует проверки замечаний. Сначала сверьте критичные замечания с источником.";
 }
 
 function append(parent, tag, content) {
@@ -113,22 +131,19 @@ function addFinding(parent, finding) {
   for (const quote of finding.conflicting_quotes ?? []) append(parent, "blockquote", quote);
 }
 
-function reportSection(id, title) {
-  const section = append(report, "section", "");
+function reportSection(container, id, title) {
+  const section = append(container, "section", "");
   section.className = "report-section";
   section.id = id;
   append(section, "h2", title);
   return section;
 }
 
-function renderReport(review) {
-  const { findings, critical } = counts(review);
-  byId("summary").textContent = `${review.document} · Требований: ${review.requirements.length} · Замечаний: ${findings.length} · Критичных по оценке агента: ${critical.length}`;
-
-  const metadata = reportSection("passport", "Паспорт прогона");
+function renderReport(review, container) {
+  const metadata = reportSection(container, "passport", "Паспорт прогона");
   for (const line of passport(review)) append(metadata, "p", line);
 
-  const whole = reportSection("findings", "Замечания по документу");
+  const whole = reportSection(container, "findings", "Замечания по документу");
   if (!review.document_findings.length) append(whole, "p", "Агент не нашёл замечаний.");
   for (const finding of review.document_findings) {
     const entry = append(whole, "div", "");
@@ -142,7 +157,7 @@ function renderReport(review) {
   }
   for (const warning of review.review_warnings ?? []) append(whole, "p", warning);
 
-  const requirements = reportSection("requirements", "Отдельные требования");
+  const requirements = reportSection(container, "requirements", "Отдельные требования");
   for (const item of review.requirements) {
     const entry = append(requirements, "details", "");
     append(entry, "summary", [item.id, item.source_id, item.statement].filter(Boolean).join(" · "));
@@ -150,12 +165,19 @@ function renderReport(review) {
     for (const finding of item.findings) addFinding(entry, finding);
     for (const source of sources(review, item.block_ids)) append(entry, "blockquote", source);
   }
-  append(reportSection("outcome", "Итог"), "p", verdict());
+  append(reportSection(container, "outcome", "Итог"), "p", verdict());
 }
 
 if (report) {
-  currentReview = globalThis.demoReport;
-  renderReport(currentReview);
+  const saved = sessionStorage.getItem("requirementsReview");
+  if (saved) {
+    currentReview = JSON.parse(saved);
+    const { findings, critical } = counts(currentReview);
+    byId("summary").textContent = `${currentReview.document} · Требований: ${currentReview.requirements.length} · Замечаний: ${findings.length} · Критичных по оценке агента: ${critical.length}`;
+    renderReport(currentReview, report);
+  } else {
+    status.textContent = "Загрузите документ и запустите проверку.";
+  }
 }
 
 function markdownReport(review) {
@@ -194,82 +216,34 @@ function markdownReport(review) {
   return lines.join("\n");
 }
 
-byId("download").addEventListener("click", () => {
-  if (!currentReview) return;
-  const url = URL.createObjectURL(new Blob([markdownReport(currentReview)], { type: "text/markdown;charset=utf-8" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "review.md";
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-});
-
-
-function drawTexture() {
-  const canvas = byId("texture");
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  const width = canvas.width = Math.ceil(innerWidth / 2);
-  const height = canvas.height = Math.ceil(innerHeight / 2);
-  let seed = 12345;
-  function random() {
-    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-    return seed / 4294967296;
-  }
-
-  ctx.fillStyle = "#140917";
-  ctx.fillRect(0, 0, width, height);
-  const fragments = [
-    { ink: "#a831ee", points: [[0,0],[.36,0],[.32,.12],[.27,.14],[.29,.19],[.16,.48],[0,.67]] },
-    { ink: "#ec2198", points: [[.64,0],[1,0],[1,.57],[.91,.49],[.81,.37],[.85,.33],[.76,.24]] },
-    { ink: "#652aba", points: [[0,.7],[.28,.57],[.22,.7],[.39,.76],[.46,1],[0,1]] },
-    { ink: "#b828d1", points: [[1,.51],[1,1],[.64,1],[.75,.89],[.73,.82],[.84,.75],[.9,.61]] },
-  ];
-
-  for (const { ink, points } of fragments) {
-    ctx.save();
-    ctx.beginPath();
-    points.forEach(([x, y], index) => {
-      if (index === 0) ctx.moveTo(x * width, y * height);
-      else ctx.lineTo(x * width, y * height);
-    });
-    ctx.closePath();
-    ctx.clip();
-    ctx.fillStyle = ink;
-    ctx.fillRect(0, 0, width, height);
-    for (let y = 0; y < height; y += 2) {
-      for (let x = y % 4; x < width; x += 4) {
-        const grain = random();
-        const phase = (x + 2 * y + 36 * Math.sin(y / 35)) % 79;
-        ctx.fillStyle = grain > .98 ? "#fff6ff" : "#180a22";
-        if (grain > .48 || phase < 27) ctx.fillRect(x, y, grain > .6 ? 2 : 1, 1);
+for (const button of document.querySelectorAll("[data-download]")) {
+  button.addEventListener("click", async () => {
+    if (!currentReview) return;
+    const review = currentReview;
+    const format = button.dataset.download;
+    button.disabled = true;
+    try {
+      let blob;
+      if (format === "pdf") {
+        const printable = document.createElement("article");
+        append(printable, "h1", "Отчёт о проверке требований");
+        renderReport(review, printable);
+        blob = await globalThis.createReportPdf(printable);
+      } else {
+        blob = new Blob([markdownReport(review)], { type: "text/markdown;charset=utf-8" });
       }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `review.${format}`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch {
+      if (currentReview === review) status.textContent = "Не удалось скачать отчёт. Попробуйте ещё раз.";
+    } finally {
+      button.disabled = false;
     }
-    ctx.restore();
-  }
-
-  for (let i = 0; i < 76; i++) {
-    const x = Math.floor(random() * width);
-    const y = Math.floor(random() * height);
-    const length = Math.floor(random() * width * .23) + 4;
-    ctx.fillStyle = ["#fceaf7", "#2a0b37", "#ff49bc", "#6d36ac"][i % 4];
-    ctx.fillRect(x, y, length, i % 7 === 0 ? 3 : 1);
-    if (i % 3 === 0) {
-      ctx.fillStyle = "#17091c";
-      ctx.fillRect(x + 14, y + 1, length * .73, 4);
-    }
-  }
-
-  const blocks = [[.11,.3], [.86,.14], [.09,.78], [.8,.86]];
-  for (const [x, y] of blocks) {
-    for (let row = 0; row < 9; row++) {
-      for (let col = 0; col < 14; col++) {
-        if (random() > .52) continue;
-        ctx.fillStyle = random() > .62 ? "#fceaf7" : "#36104f";
-        ctx.fillRect(Math.floor(x * width) + col * 4, Math.floor(y * height) + row * 4, 3, 3);
-      }
-    }
-  }
+  });
 }
-drawTexture();
-addEventListener("resize", drawTexture);
