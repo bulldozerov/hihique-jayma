@@ -97,12 +97,12 @@ if (scene) {
   scene.addEventListener("focusin", settle, { once: true });
 }
 
-function sources(review, ids) {
+function sources(review, ids, excerpt) {
   return ids.flatMap((id) => {
     const block = review.evidence[id];
     if (!block) return [];
     const location = block.page ? `стр. ${block.page}` : `строки ${block.start_line}–${block.end_line}`;
-    return [`${id}, ${location}\n${block.source}`];
+    return [`${id}, ${location}\n${excerpt ?? block.source}`];
   });
 }
 
@@ -135,9 +135,13 @@ function append(parent, tag, content) {
   return element;
 }
 
-function addFinding(parent, finding) {
+function addFinding(parent, finding, review) {
   append(parent, "p", `${findingLabel(finding)}. ${finding.explanation}`).dataset.severity = finding.severity;
   for (const quote of finding.conflicting_quotes ?? []) append(parent, "blockquote", quote);
+  if (finding.source) {
+    const { block_id, quote } = finding.source;
+    for (const source of sources(review, [block_id], quote)) append(parent, "blockquote", source);
+  }
 }
 
 function reportSection(container, id, title) {
@@ -192,16 +196,18 @@ function renderReport(review, container) {
   for (const item of review.requirements) {
     const entry = append(requirements, "details", "");
     append(entry, "summary", [item.id, item.source_id, item.statement].filter(Boolean).join(" · "));
-    if (!item.findings.length) append(entry, "p", "Агент не нашёл замечаний.");
-    for (const finding of item.findings) addFinding(entry, finding);
+    if (!item.findings.length) append(entry, "p", "Подтверждённых замечаний нет.");
+    for (const finding of item.findings) addFinding(entry, finding, review);
     for (const source of sources(review, item.block_ids)) append(entry, "blockquote", source);
   }
   const summary = reportSection(container, "review-summary", "Сводка");
   const { findings, critical } = counts(review);
   append(summary, "p", `Требований — ${review.requirements.length}. Нарушений — ${findings.length}. Критичных — ${critical.length}.`);
   for (const finding of review.summary?.critical ?? critical) {
-    addFinding(summary, finding);
-    for (const source of sources(review, finding.block_ids ?? [])) append(summary, "blockquote", source);
+    addFinding(summary, finding, review);
+    if (!finding.source) {
+      for (const source of sources(review, finding.block_ids ?? [])) append(summary, "blockquote", source);
+    }
   }
   const outcome = reportSection(container, "outcome", "Итог");
   append(outcome, "p", verdict(review));
@@ -230,6 +236,7 @@ function markdownReport(review) {
   const findingLine = (item) => {
     lines.push(`- ${findingLabel(item)}. ${item.explanation}`, "");
     for (const text of item.conflicting_quotes ?? []) quote(text);
+    if (item.source) sources(review, [item.source.block_id], item.source.quote).forEach(quote);
   };
   lines.push(...passport(review).map((line) => `- ${line}`), "", "## Карта требований", "");
   lines.push("| ID отчёта | ID источника | Формулировка |", "| --- | --- | --- |");
@@ -240,7 +247,7 @@ function markdownReport(review) {
   lines.push("", "## Проверка отдельных требований");
   for (const item of review.requirements) {
     lines.push("", `### ${item.id}`, "");
-    if (!item.findings.length) lines.push("Агент не нашёл замечаний.", "");
+    if (!item.findings.length) lines.push("Подтверждённых замечаний нет.", "");
     item.findings.forEach(findingLine);
     sources(review, item.block_ids).forEach(quote);
   }
@@ -264,7 +271,7 @@ function markdownReport(review) {
   lines.push("## Сводка", "", `Требований — ${review.requirements.length}. Замечаний — ${findings.length}. Критичных по оценке агента — ${critical.length}.`, "");
   for (const finding of review.summary?.critical ?? critical) {
     findingLine(finding);
-    sources(review, finding.block_ids ?? []).forEach(quote);
+    if (!finding.source) sources(review, finding.block_ids ?? []).forEach(quote);
   }
   lines.push("## Итог", "", verdict(review), "");
   (review.summary?.priorities ?? []).forEach((item, index) => {

@@ -36,7 +36,10 @@ def build_report(document: str, model: str, result: dict) -> dict:
             pass
 
     findings = [
-        {**finding, "block_ids": requirement["block_ids"]}
+        {
+            **finding,
+            "block_ids": [finding["source"]["block_id"]] if finding.get("source") else requirement["block_ids"],
+        }
         for requirement in result["requirements"] for finding in requirement["findings"]
     ] + result["document_findings"]
     critical = [finding for finding in findings if finding["severity"] == "critical"]
@@ -78,7 +81,7 @@ def markdown_report(report: dict) -> str:
     def section(title: str) -> None:
         lines.extend([f"## {title}", ""])
 
-    def sources(ids: list[str]) -> None:
+    def sources(ids: list[str], excerpt: str | None = None) -> None:
         for block_id in dict.fromkeys(ids):
             block = report["evidence"][block_id]
             location = (
@@ -86,7 +89,7 @@ def markdown_report(report: dict) -> str:
                 else f'строки {block["start_line"]}–{block["end_line"]}'
             )
             lines.extend([f"**{block_id}, {location}**", ""])
-            lines.extend(f"> {line}" for line in block["source"].splitlines())
+            lines.extend(f"> {line}" for line in (excerpt or block["source"]).splitlines())
             lines.append("")
 
     def finding(item: dict, include_sources: bool = True) -> None:
@@ -95,7 +98,9 @@ def markdown_report(report: dict) -> str:
         for quote in item.get("conflicting_quotes", []):
             lines.extend(f"> {line}" for line in quote.splitlines())
             lines.append("")
-        if include_sources:
+        if source := item.get("source"):
+            sources([source["block_id"]], source["quote"])
+        elif include_sources:
             sources(item["block_ids"])
 
     def cell(value: str) -> str:
@@ -118,7 +123,7 @@ def markdown_report(report: dict) -> str:
     for item in report["requirements"]:
         lines.extend([f'### {item["id"]} — {item["statement"]}', ""])
         if not item["findings"]:
-            lines.extend(["Замечаний нет.", ""])
+            lines.extend(["Подтверждённых замечаний нет.", ""])
         for defect in item["findings"]:
             finding(defect, include_sources=False)
         sources(item["block_ids"])

@@ -19,6 +19,11 @@ class Reviewer(Protocol):
     def request(self, stage: str, prompt: str, schema: type[Result]) -> Result: ...
 
 
+class FindingSource(BaseModel):
+    block_id: str
+    quote: str
+
+
 class LocalFinding(BaseModel):
     rule_id: str
     kind: Literal["ambiguity", "unverifiable", "incomplete", "design_constraint"]
@@ -26,6 +31,7 @@ class LocalFinding(BaseModel):
     explanation: str = Field(min_length=1)
     recommendation: str = ""
     impact: str = ""
+    source: FindingSource | None = None
 
 
 class Requirement(BaseModel):
@@ -73,6 +79,9 @@ LOCAL_PROMPT = """Выдели все требования из целевых �
 Метаданные, шаблонные поля и иллюстративные примеры
 используй как контекст. Сохрани исходный ID, если он указан, и дай точные ID
 опорных блоков. Переформулируй требование кратко, сохранив ограничения.
+Для каждого локального замечания заполни source: block_id одного из опорных
+блоков этого требования и quote — короткая дословная цитата из поля text
+этого блока, где виден дефект или где заявлено поведение с пробелом.
 Применяй критерии из каталога первого прохода. Для замечаний, зависящих
 от других разделов, предусмотрена отдельная проверка документа.
 Отмечай недостаток только если он меняет наблюдаемое поведение или критерий
@@ -190,6 +199,7 @@ def run_review(blocks: list[DocumentBlock], reviewer: Reviewer) -> dict:
     ]
     requirements = {}
     referenced_blocks = set()
+    review_warnings = []
     api_blocks = api_review_blocks(block_data)
     api_ids = {block["id"] for block in api_blocks}
     business_blocks = [block for block in block_data if block["id"] not in api_ids]
@@ -215,10 +225,25 @@ def run_review(blocks: list[DocumentBlock], reviewer: Reviewer) -> dict:
             unknown = cited - (targets | context_ids)
             if unknown or not cited & targets:
                 raise ValueError(f"{stage}: invalid block IDs {requirement.block_ids}")
+            requirement_id = f"R{len(requirements) + 1:03d}"
+            confirmed = []
             for finding in requirement.findings:
                 _check_rule(finding.rule_id, finding.kind, local_kinds, stage)
+                evidence = finding.source
+                quote = " ".join(evidence.quote.split()) if evidence else ""
+                if (
+                    not quote or evidence.block_id not in cited
+                    or quote not in " ".join(sources[evidence.block_id].text.split())
+                ):
+                    review_warnings.append(
+                        f"{requirement_id}: замечание {finding.rule_id} исключено, "
+                        "поскольку цитату не удалось сверить с указанным блоком ТЗ."
+                    )
+                    continue
+                confirmed.append(finding)
+            requirement.findings = confirmed
             referenced_blocks.update(cited)
-            requirements[f"R{len(requirements) + 1:03d}"] = requirement
+            requirements[requirement_id] = requirement
 
     requirement_data = [
         {"id": rid, **req.model_dump(exclude={"findings"})}
@@ -268,7 +293,6 @@ def run_review(blocks: list[DocumentBlock], reviewer: Reviewer) -> dict:
         "document review", f"{SET_PROMPT}\n{RECOMMENDATION_PROMPT}\n{focus}\n{set_rules}\n{DATA_NOTE}\n{payload}",
         SetReview,
     )
-    review_warnings = []
     try:
         api_gaps = list(check_api_coverage(api_blocks, reviewer))
     except (ValueError, RuntimeError):
