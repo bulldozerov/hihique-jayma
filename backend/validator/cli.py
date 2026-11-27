@@ -15,7 +15,7 @@ from .report import build_report, markdown_report
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path, help="Markdown or PDF specification")
-    parser.add_argument("--output", required=True, type=Path, help="Output Markdown (.md) or JSON (.json) file")
+    parser.add_argument("--output", required=True, type=Path, help="Output PDF, Markdown or JSON file")
     parser.add_argument("--env-file", type=Path, default=Path(".env"))
     parser.add_argument(
         "--no-retries", action="store_true", help="Kept for compatibility. Retries are always disabled."
@@ -29,8 +29,8 @@ def main() -> None:
     if args.output.resolve() == args.input.resolve():
         parser.error("The output file must differ from the input file")
     output_format = args.output.suffix.lower()
-    if output_format not in {".md", ".json"}:
-        parser.error("Use .md or .json for the output file")
+    if output_format not in {".pdf", ".md", ".json"}:
+        parser.error("Use .pdf, .md or .json for the output file")
 
     load_dotenv(args.env_file)
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
@@ -41,6 +41,9 @@ def main() -> None:
     from .gemini import GeminiReviewer, open_client
 
     try:
+        if output_format == ".pdf":
+            from .pdf_report import write_pdf
+
         blocks = read_document(args.input)
         total_blocks = len(blocks)
         if args.max_blocks is not None:
@@ -58,12 +61,15 @@ def main() -> None:
             else:
                 output["review_scope"]["last_page"] = blocks[-1].page
             output["summary"]["readiness"] = "Проверен только фрагмент. Готовность всего документа не оценивалась."
-        report_text = (
-            markdown_report(output) if output_format == ".md"
-            else json.dumps(output, ensure_ascii=False, indent=2) + "\n"
-        )
-        args.output.write_text(report_text, encoding="utf-8")
-    except (OSError, ValueError, RuntimeError) as exc:
+        if output_format == ".pdf":
+            write_pdf(markdown_report(output), args.output)
+        else:
+            report_text = (
+                markdown_report(output) if output_format == ".md"
+                else json.dumps(output, ensure_ascii=False, indent=2) + "\n"
+            )
+            args.output.write_text(report_text, encoding="utf-8")
+    except (ImportError, OSError, ValueError, RuntimeError) as exc:
         parser.exit(1, f"{exc}\n")
 
 
