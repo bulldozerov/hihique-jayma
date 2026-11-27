@@ -15,13 +15,18 @@ class GeminiReviewer:
     def __init__(self, client: genai.Client, model: str) -> None:
         self.client = client
         self.model = model
+        self.requests = 0
 
     def request(self, stage: str, prompt: str, schema: type[Result]) -> Result:
+        if self.requests >= 5:
+            raise RuntimeError("Gemini request limit exceeded for this review")
+        self.requests += 1
         try:
             response = self.client.interactions.create(
                 model=self.model,
                 input=prompt,
                 store=False,
+                automatic_continuation=False,
                 response_format={
                     "type": "text",
                     "mime_type": "application/json",
@@ -45,15 +50,14 @@ class GeminiReviewer:
             raise ValueError(f"{stage}: Gemini returned invalid review JSON") from exc
 
 
-def open_client(api_key: str, *, retries: bool = True) -> genai.Client:
-    retry_options = types.HttpRetryOptions(
-        attempts=4 if retries else 1,
-        initial_delay=2,
-        max_delay=8,
-        jitter=1,
-        http_status_codes=[408, 429, 500, 502, 503, 504],
-    )
-    return genai.Client(
+def open_client(api_key: str) -> genai.Client:
+    client = genai.Client(
         api_key=api_key,
-        http_options=types.HttpOptions(timeout=120_000, retry_options=retry_options),
+        http_options=types.HttpOptions(
+            timeout=120_000, retry_options=types.HttpRetryOptions(attempts=0)
+        ),
     )
+    # Client construction normalizes zero to one. Interactions counts retries
+    # after the initial request and reads these options when first accessed.
+    client._api_client._http_options.retry_options.attempts = 0
+    return client

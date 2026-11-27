@@ -1,4 +1,4 @@
-"""Run both Gemini review passes and write the structured result."""
+"""Review a specification and write the structured result."""
 
 import argparse
 import json
@@ -17,7 +17,7 @@ def main() -> None:
     parser.add_argument("--output", required=True, type=Path, help="Review JSON file")
     parser.add_argument("--env-file", type=Path, default=Path(".env"))
     parser.add_argument(
-        "--no-retries", action="store_true", help="Disable automatic Gemini retries"
+        "--no-retries", action="store_true", help="Kept for compatibility. Retries are always disabled."
     )
     parser.add_argument(
         "--max-blocks", type=int, help="Review only the first N source blocks"
@@ -41,7 +41,7 @@ def main() -> None:
         total_blocks = len(blocks)
         if args.max_blocks is not None:
             blocks = blocks[:args.max_blocks]
-        with open_client(api_key, retries=not args.no_retries) as client:
+        with open_client(api_key) as client:
             result = run_review(blocks, GeminiReviewer(client, model))
         output = {"document": args.input.name, "model": model, **result}
         if len(blocks) < total_blocks:

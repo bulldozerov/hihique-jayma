@@ -1,0 +1,41 @@
+{
+  "before": {
+    "booking-md-1": [],
+    "booking-md-2": [],
+    "booking-md-3": [],
+    "booking-pdf-1": ["unsupported"],
+    "booking-pdf-2": [],
+    "booking-pdf-3": [],
+    "delivery-md-1": ["sms"],
+    "delivery-md-2": ["sms"],
+    "delivery-md-3": ["sms"],
+    "delivery-pdf-1": ["sms"],
+    "delivery-pdf-2": ["sms"],
+    "delivery-pdf-3": ["sms"],
+    "subscription-md-1": [],
+    "subscription-md-2": ["read"],
+    "subscription-md-3": ["read"],
+    "subscription-pdf-1": ["read"],
+    "subscription-pdf-2": ["read"],
+    "subscription-pdf-3": ["read"]
+  },
+  "after": {
+    "booking-md-1": [],
+    "booking-md-2": [],
+    "booking-md-3": [],
+    "booking-pdf-1": [],
+    "booking-pdf-2": [],
+    "booking-pdf-3": [],
+    "delivery-md-1": ["sms"],
+    "delivery-md-2": ["sms"],
+    "delivery-md-3": ["sms"],
+    "delivery-pdf-1": ["sms"],
+    "delivery-pdf-2": ["sms"],
+    "delivery-pdf-3": ["sms"],
+    "subscription-md-1": ["read", "read", "status_201"],
+    "subscription-md-2": ["read"],
+    "subscription-md-3": ["read", "status_201"],
+    "subscription-pdf-1": ["read", "status_201"],
+    "subscription-pdf-3": ["read", "status_201"]
+  }
+}

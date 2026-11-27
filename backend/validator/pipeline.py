@@ -1,15 +1,14 @@
 """Run local and document-wide reviews over source blocks."""
 
 from importlib.resources import files
-from itertools import groupby
 import json
-import re
 from typing import Literal, Protocol, TypeVar
 
 from pydantic import BaseModel, Field
 from yaml import safe_load
 
 from .acceptance import expected_month, predict_cases
+from .api_coverage import api_review_blocks, check_api_coverage
 from .readers import DocumentBlock
 
 Result = TypeVar("Result", bound=BaseModel)
@@ -60,11 +59,7 @@ class SetReview(BaseModel):
     findings: list[SetFinding]
 
 
-class FocusedReview(BaseModel):
-    findings: list[SetFinding]
-
-
-LOCAL_PROMPT = """Выдели все требования из целевых блоков раздела и проверь каждое по отдельности.
+LOCAL_PROMPT = """Выдели все требования из целевых блоков переданных разделов и проверь каждое по отдельности.
 Проверь каждый целевой блок, включая списки, таблицы, API и ненумерованные правила.
 Возвращай отдельное требование для каждого независимо проверяемого обязательства,
 параметра API и условия возврата статуса. Сохрани все явно указанные значения,
@@ -84,8 +79,7 @@ LOCAL_PROMPT = """Выдели все требования из целевых �
 SET_PROMPT = """Проверь ТЗ целиком. Сопоставь бизнес-правила, критерии приёмки,
 данные, интерфейс и API. Отдельно сопоставь правила повторных действий с лимитами,
 правила расчёта дат и границ с примерами приёмки, а статусы API — с примерами
-ответов. Проверь, всем ли заявленным операциям соответствует описание метода
-и определены ли условия для каждого заявленного статуса. Проверь, как исключения
+ответов. Проверь, как исключения
 и повторные действия влияют на ограничения, на конкретном сценарии.
 Для каждой строки в blind_predictions сравни derived_result с ячейкой
 «Ожидаемый результат». Сохрани независимый вывод дословно в acceptance_checks.
@@ -94,6 +88,9 @@ contradiction в findings с цитатами правила и таблицы. 
 month_conflicts уже обнаружены кодом, их не нужно добавлять повторно.
 Просмотри исходные блоки, даже если первый проход объединил несколько
 правил в одно требование. Противоречия ищи между утверждениями самого документа.
+Проверка полноты описания заявленных операций и статусов API выполняется отдельно.
+Учитывай область применимости, роли и явные исключения. Само по себе поле ERROR
+в теле ответа не доказывает противоречие HTTP-статусов.
 Ищи также пробелы и дубли. Для противоречия
 опиши сценарий, где правила дают разные результаты. Передай две разные дословные
 цитаты в conflicting_quotes. Если цитаты из разных блоков, передай ровно два
@@ -118,12 +115,13 @@ FOCUSED_CHECKS = {
         "блок с самим предписанием, в том числе continuation, если фраза находится там."
     ),
     "API contract": (
-        "Сопоставь операции в бизнес-требованиях с описанными методами. Для каждого "
-        "объявленного HTTP-статуса проверь условие его возврата и соответствие "
-        "примеров. Сопоставь форматы полей с примерами. Ищи расхождения внутри "
+        "Сопоставь поведение описанных методов с бизнес-требованиями. "
+        "Проверь, согласуются ли условия возврата статусов с примерами. "
+        "Сопоставь форматы полей с примерами. Ищи расхождения внутри "
         "документа и пробелы, влияющие на реализацию клиента. Для конфликта "
         "HTTP-статуса укажи цитаты с обоими взаимоисключающими исходами. "
-        "Поле ERROR само по себе не означает, что документ обещает другой HTTP-статус."
+        "Поле ERROR само по себе не означает, что документ обещает другой HTTP-статус. "
+        "Полнота описания заявленных операций и статусов проверяется отдельно."
     ),
 }
 
@@ -179,9 +177,11 @@ def run_review(blocks: list[DocumentBlock], reviewer: Reviewer) -> dict:
     ]
     requirements = {}
     referenced_blocks = set()
-    for section, group in groupby(block_data, key=lambda block: block["section"]):
-        section_blocks = list(group)
-        if all(block["kind"] == "heading" for block in section_blocks):
+    api_blocks = api_review_blocks(block_data)
+    api_ids = {block["id"] for block in api_blocks}
+    business_blocks = [block for block in block_data if block["id"] not in api_ids]
+    for topic, section_blocks in (("business", business_blocks), ("API", api_blocks)):
+        if not any(block["kind"] != "heading" for block in section_blocks):
             continue
         targets = {block["id"] for block in section_blocks}
         context_ids = {
@@ -190,10 +190,10 @@ def run_review(blocks: list[DocumentBlock], reviewer: Reviewer) -> dict:
         }
         context = [block for block in block_data if block["id"] in context_ids]
         payload = json.dumps(
-            {"section": section, "target_blocks": section_blocks, "context_blocks": context},
+            {"target_blocks": section_blocks, "context_blocks": context},
             ensure_ascii=False,
         )
-        stage = f"local review ({section[-1] if section else section_blocks[0]['id']})"
+        stage = f"local review ({topic})"
         local = reviewer.request(
             stage, f"{LOCAL_PROMPT}\n{local_rules}\n{DATA_NOTE}\n{payload}", LocalReview
         )
@@ -245,56 +245,22 @@ def run_review(blocks: list[DocumentBlock], reviewer: Reviewer) -> dict:
         },
         ensure_ascii=False,
     )
+    focus = "\n".join(FOCUSED_CHECKS.values())
     whole = reviewer.request(
-        "document review", f"{SET_PROMPT}\n{set_rules}\n{DATA_NOTE}\n{payload}", SetReview
+        "document review", f"{SET_PROMPT}\n{focus}\n{set_rules}\n{DATA_NOTE}\n{payload}",
+        SetReview,
     )
-    focused_findings = []
-    for topic, task in FOCUSED_CHECKS.items():
-        if topic == "business rules":
-            continuation_parents = {
-                block["continuation_of"] for block in block_data if "continuation_of" in block
-            }
-            related = [
-                block for block in block_data
-                if block["id"] in continuation_parents
-                or block["kind"] == "continuation"
-                or re.search(
-                    r"максимум|не более|не чаще|повтор|независимо|следующ|(?:частот|лимит).{0,24}(?:в день|месяц)|\bat most\b",
-                    block["text"], re.IGNORECASE,
-                )
-            ]
-        else:
-            related = [
-                block for block in block_data
-                if any(re.search(r"\b(?:API|REST|HTTP)\b|интеграц", title, re.IGNORECASE)
-                       for title in [*block["section"], block["text"]])
-            ]
-        selected = related or block_data
-        selected_ids = {block["id"] for block in selected}
-        focused_payload = json.dumps(
-            {
-                "blocks": selected,
-                "requirement_links": [
-                    {"id": item["id"], "block_ids": item["block_ids"]} for item in requirement_data
-                    if selected_ids.intersection(item["block_ids"])
-                ],
-                "month_conflicts": [finding.model_dump() for finding in month_conflicts],
-            },
-            ensure_ascii=False,
+    api_findings = [
+        SetFinding(
+            rule_id="S02", kind="gap", severity="major",
+            requirement_ids=[rid for rid, req in requirements.items() if bid in req.block_ids],
+            block_ids=[bid], conflicting_quotes=[quote], explanation=explanation,
         )
-        focused = reviewer.request(
-            f"document review ({topic})",
-            f"{task}\n{set_rules}\n{DATA_NOTE}\n"
-            "Для противоречия укажи две разные дословные цитаты из поля text. "
-            "Передай один block_id для двух цитат из одного блока или два block_ids "
-            "в порядке цитат. Не повторяй month_conflicts. Пиши по-русски.\n"
-            f"{focused_payload}",
-            FocusedReview,
-        )
-        focused_findings.extend(focused.findings)
+        for bid, quote, explanation in check_api_coverage(api_blocks, reviewer)
+    ]
     document_findings = []
     review_warnings = []
-    for finding in [*month_conflicts, *whole.findings, *focused_findings]:
+    for finding in [*month_conflicts, *whole.findings, *api_findings]:
         _check_rule(finding.rule_id, finding.kind, set_kinds, "document review")
         evidence = set(finding.block_ids)
         unknown_blocks = evidence - sources.keys()

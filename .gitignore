@@ -53,3 +53,8 @@ Thumbs.db
 
 # venv
 .hihique-jayma/
+
+# Local Gemini run artifacts
+/review-md-5.json
+/review-pdf-5.json
+/tests/benchmark/results/
