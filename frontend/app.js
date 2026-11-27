@@ -119,6 +119,15 @@ function verdict(review) {
   return review.summary?.readiness ?? "Готовность к разработке и тестированию требует сверки замечаний с источником.";
 }
 
+function priorityText(item, index) {
+  return [
+    `${index + 1}. ${severity[item.severity]} · ${item.block_ids.join(", ")}`,
+    `Проблема — ${item.explanation}`,
+    item.impact && `Почему важно — ${item.impact}`,
+    item.recommendation && `Что исправить — ${item.recommendation}`,
+  ].filter(Boolean);
+}
+
 function append(parent, tag, content) {
   const element = document.createElement(tag);
   element.textContent = content;
@@ -196,9 +205,11 @@ function renderReport(review, container) {
   }
   const outcome = reportSection(container, "outcome", "Итог");
   append(outcome, "p", verdict(review));
-  for (const item of review.summary?.priorities ?? []) {
-    append(outcome, "p", `${item.explanation} (${item.block_ids.join(", ")}).`);
-  }
+  (review.summary?.priorities ?? []).forEach((item, index) => {
+    const [heading, ...details] = priorityText(item, index);
+    append(outcome, "h3", heading).dataset.severity = item.severity;
+    for (const detail of details) append(outcome, "p", detail);
+  });
 }
 
 if (report) {
@@ -256,9 +267,10 @@ function markdownReport(review) {
     sources(review, finding.block_ids ?? []).forEach(quote);
   }
   lines.push("## Итог", "", verdict(review), "");
-  for (const item of review.summary?.priorities ?? []) {
-    lines.push(`- ${item.explanation} (${item.block_ids.join(", ")}).`, "");
-  }
+  (review.summary?.priorities ?? []).forEach((item, index) => {
+    const [heading, ...details] = priorityText(item, index);
+    lines.push(heading, ...details.map((detail) => `   - ${detail}`), "");
+  });
   return lines.join("\n");
 }
 

@@ -12,6 +12,15 @@ KINDS = {
     "incomplete": "Неполнота", "design_constraint": "Ограничение реализации",
     "contradiction": "Противоречие", "gap": "Пробел", "duplication": "Дублирование",
 }
+RECOMMENDATIONS = {
+    "ambiguity": "Согласуйте смысл спорной формулировки и закрепите его в указанном пункте.",
+    "unverifiable": "Допишите наблюдаемый результат, по которому тестировщик сможет проверить это требование.",
+    "incomplete": "Допишите условие, действие и ожидаемый результат для описанного пропущенного сценария.",
+    "design_constraint": "Уточните, обязательно ли указанное проектное решение, и сформулируйте ожидаемое поведение.",
+    "contradiction": "Согласуйте единый результат для указанного сценария и приведите обе формулировки к этому правилу.",
+    "gap": "Опишите ожидаемое поведение в указанном сценарии и добавьте критерий его приёмки.",
+    "duplication": "Оставьте одну согласованную формулировку, а в остальных местах дайте ссылку на неё.",
+}
 
 
 def build_report(document: str, model: str, result: dict) -> dict:
@@ -31,16 +40,24 @@ def build_report(document: str, model: str, result: dict) -> dict:
         for requirement in result["requirements"] for finding in requirement["findings"]
     ] + result["document_findings"]
     critical = [finding for finding in findings if finding["severity"] == "critical"]
-    priority = critical or [finding for finding in findings if finding["severity"] == "major"]
+    major = [finding for finding in findings if finding["severity"] == "major"]
+    minor = [finding for finding in findings if finding["severity"] == "minor"]
     if critical:
         readiness = "Начинать разработку и тестирование по затронутым сценариям рано. Сначала исправьте критичные дефекты."
     elif result.get("review_warnings") or not result["requirements"]:
         readiness = "Готовность к разработке и тестированию не подтверждена. Проверьте полноту прогона."
-    elif priority:
+    elif major:
         readiness = "Разработку и тестирование можно начать по однозначным требованиям. Сначала уточните существенные замечания в затронутых сценариях."
     else:
         readiness = "По результатам прогона разработку и тестирование можно начинать."
-        priority = findings
+
+    priorities = [
+        {
+            **finding,
+            "recommendation": (finding.get("recommendation") or "").strip() or RECOMMENDATIONS[finding["kind"]],
+        }
+        for finding in (critical + major + minor)[:3]
+    ]
 
     return {
         "document": document,
@@ -50,7 +67,7 @@ def build_report(document: str, model: str, result: dict) -> dict:
         **result,
         "summary": {
             "requirements": len(result["requirements"]), "violations": len(findings),
-            "critical": critical, "readiness": readiness, "priorities": priority[:3],
+            "critical": critical, "readiness": readiness, "priorities": priorities,
         },
     }
 
@@ -128,6 +145,12 @@ def markdown_report(report: dict) -> str:
         finding(item)
     section("Итог")
     lines.extend([summary["readiness"], ""])
-    for item in summary["priorities"]:
-        lines.append(f'- {item["explanation"]} ({", ".join(item["block_ids"])}).')
+    for index, item in enumerate(summary["priorities"], 1):
+        lines.extend([
+            f'{index}. **{SEVERITY[item["severity"]]} · {", ".join(item["block_ids"])}**',
+            f'   - Проблема — {item["explanation"]}',
+        ])
+        if impact := (item.get("impact") or "").strip():
+            lines.append(f"   - Почему важно — {impact}")
+        lines.append(f'   - Что исправить — {item["recommendation"]}')
     return "\n".join(lines).rstrip() + "\n"
