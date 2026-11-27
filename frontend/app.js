@@ -139,6 +139,11 @@ function reportSection(container, id, title) {
   return section;
 }
 
+function acceptanceResult(check) {
+  const verdicts = { match: "Совпадает", mismatch: "Расхождение", undetermined: "Не определено" };
+  return `${check.block_id} · ${verdicts[check.verdict]} — ${check.derived_result}`;
+}
+
 function renderReport(review, container) {
   const metadata = reportSection(container, "passport", "Паспорт прогона");
   for (const line of passport(review)) append(metadata, "p", line);
@@ -156,6 +161,14 @@ function renderReport(review, container) {
     for (const source of sources(review, finding.block_ids)) append(sourceBlocks, "blockquote", source);
   }
   for (const warning of review.review_warnings ?? []) append(whole, "p", warning);
+
+  if (review.acceptance_checks?.length) {
+    const acceptance = reportSection(container, "acceptance", "Проверка критериев приёмки");
+    for (const check of review.acceptance_checks) {
+      append(acceptance, "p", acceptanceResult(check));
+      for (const source of sources(review, [check.block_id])) append(acceptance, "blockquote", source);
+    }
+  }
 
   const requirements = reportSection(container, "requirements", "Отдельные требования");
   for (const item of review.requirements) {
@@ -205,6 +218,13 @@ function markdownReport(review) {
   for (const finding of review.document_findings) {
     findingLine(finding);
     sources(review, finding.block_ids).forEach(quote);
+  }
+  if (review.acceptance_checks?.length) {
+    lines.push("## Проверка критериев приёмки", "");
+    for (const check of review.acceptance_checks) {
+      lines.push(`- ${acceptanceResult(check)}`, "");
+      sources(review, [check.block_id]).forEach(quote);
+    }
   }
   if (review.review_warnings?.length) {
     lines.push("## Предупреждения прогона", "", ...review.review_warnings.map((warning) => `- ${warning}`), "");

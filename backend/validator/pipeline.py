@@ -250,16 +250,21 @@ def run_review(blocks: list[DocumentBlock], reviewer: Reviewer) -> dict:
         "document review", f"{SET_PROMPT}\n{focus}\n{set_rules}\n{DATA_NOTE}\n{payload}",
         SetReview,
     )
+    review_warnings = []
+    try:
+        api_gaps = list(check_api_coverage(api_blocks, reviewer))
+    except (ValueError, RuntimeError):
+        api_gaps = []
+        review_warnings.append("Отдельную проверку операций API и HTTP-статусов завершить не удалось.")
     api_findings = [
         SetFinding(
             rule_id="S02", kind="gap", severity="major",
             requirement_ids=[rid for rid, req in requirements.items() if bid in req.block_ids],
             block_ids=[bid], conflicting_quotes=[quote], explanation=explanation,
         )
-        for bid, quote, explanation in check_api_coverage(api_blocks, reviewer)
+        for bid, quote, explanation in api_gaps
     ]
     document_findings = []
-    review_warnings = []
     for finding in [*month_conflicts, *whole.findings, *api_findings]:
         _check_rule(finding.rule_id, finding.kind, set_kinds, "document review")
         evidence = set(finding.block_ids)
