@@ -115,8 +115,8 @@ function passport(review) {
   ];
 }
 
-function verdict() {
-  return "Готовность к разработке и тестированию требует проверки замечаний. Сначала сверьте критичные замечания с источником.";
+function verdict(review) {
+  return review.summary?.readiness ?? "Готовность к разработке и тестированию требует сверки замечаний с источником.";
 }
 
 function append(parent, tag, content) {
@@ -127,7 +127,7 @@ function append(parent, tag, content) {
 }
 
 function addFinding(parent, finding) {
-  append(parent, "p", `${findingLabel(finding)}. ${finding.explanation}`);
+  append(parent, "p", `${findingLabel(finding)}. ${finding.explanation}`).dataset.severity = finding.severity;
   for (const quote of finding.conflicting_quotes ?? []) append(parent, "blockquote", quote);
 }
 
@@ -153,7 +153,7 @@ function renderReport(review, container) {
   for (const finding of review.document_findings) {
     const entry = append(whole, "div", "");
     entry.className = "finding";
-    append(entry, "h3", findingLabel(finding));
+    append(entry, "h3", findingLabel(finding)).dataset.severity = finding.severity;
     append(entry, "p", finding.explanation);
     for (const quote of finding.conflicting_quotes ?? []) append(entry, "blockquote", quote);
     const sourceBlocks = append(entry, "details", "");
@@ -170,6 +170,15 @@ function renderReport(review, container) {
     }
   }
 
+  const map = reportSection(container, "requirement-map", "Карта требований");
+  const table = append(map, "table", "");
+  const header = append(append(table, "thead", ""), "tr", "");
+  for (const label of ["ID отчёта", "ID в документе", "Краткая формулировка"]) append(header, "th", label);
+  const body = append(table, "tbody", "");
+  for (const item of review.requirements) {
+    const row = append(body, "tr", "");
+    for (const value of [item.id, item.source_id || "—", item.statement]) append(row, "td", value);
+  }
   const requirements = reportSection(container, "requirements", "Отдельные требования");
   for (const item of review.requirements) {
     const entry = append(requirements, "details", "");
@@ -178,7 +187,18 @@ function renderReport(review, container) {
     for (const finding of item.findings) addFinding(entry, finding);
     for (const source of sources(review, item.block_ids)) append(entry, "blockquote", source);
   }
-  append(reportSection(container, "outcome", "Итог"), "p", verdict());
+  const summary = reportSection(container, "review-summary", "Сводка");
+  const { findings, critical } = counts(review);
+  append(summary, "p", `Требований — ${review.requirements.length}. Нарушений — ${findings.length}. Критичных — ${critical.length}.`);
+  for (const finding of review.summary?.critical ?? critical) {
+    addFinding(summary, finding);
+    for (const source of sources(review, finding.block_ids ?? [])) append(summary, "blockquote", source);
+  }
+  const outcome = reportSection(container, "outcome", "Итог");
+  append(outcome, "p", verdict(review));
+  for (const item of review.summary?.priorities ?? []) {
+    append(outcome, "p", `${item.explanation} (${item.block_ids.join(", ")}).`);
+  }
 }
 
 if (report) {
@@ -231,8 +251,14 @@ function markdownReport(review) {
   }
   const { findings, critical } = counts(review);
   lines.push("## Сводка", "", `Требований — ${review.requirements.length}. Замечаний — ${findings.length}. Критичных по оценке агента — ${critical.length}.`, "");
-  critical.forEach(findingLine);
-  lines.push("## Итог", "", verdict(), "");
+  for (const finding of review.summary?.critical ?? critical) {
+    findingLine(finding);
+    sources(review, finding.block_ids ?? []).forEach(quote);
+  }
+  lines.push("## Итог", "", verdict(review), "");
+  for (const item of review.summary?.priorities ?? []) {
+    lines.push(`- ${item.explanation} (${item.block_ids.join(", ")}).`, "");
+  }
   return lines.join("\n");
 }
 
@@ -246,7 +272,6 @@ for (const button of document.querySelectorAll("[data-download]")) {
       let blob;
       if (format === "pdf") {
         const printable = document.createElement("article");
-        append(printable, "h1", "Отчёт о проверке требований");
         renderReport(review, printable);
         blob = await globalThis.createReportPdf(printable);
       } else {

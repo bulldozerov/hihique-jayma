@@ -262,6 +262,8 @@ button:disabled { opacity: .6; }
 .report-section { border-top: 1px solid var(--line); overflow-wrap: anywhere; }
 .report-section h2 { font-size: clamp(1.25rem, 3vw, 2rem); }
 .report-section h3 { color: #ff87b3; }
+.report-section table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+.report-section :is(th, td) { text-align: left; vertical-align: top; padding: .55rem; border-bottom: 1px solid var(--line); }
 .report-section :is(details, .finding) { padding: .65rem 0; border-bottom: 1px solid var(--line); }
 .report-section summary { cursor: pointer; font-weight: 650; }
 .report-section blockquote { margin: .5rem 0; padding: .45rem .75rem; border-left: 3px solid var(--pink); background: #222; white-space: pre-wrap; }

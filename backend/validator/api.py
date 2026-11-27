@@ -1,7 +1,5 @@
 """Serve the upload UI and run document reviews."""
 
-from datetime import datetime
-from importlib.metadata import version
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -13,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from .gemini import GeminiReviewer, open_client
 from .pipeline import run_review
 from .readers import read_document
+from .report import build_report
 
 ROOT = Path(__file__).resolve().parents[2]
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -56,13 +55,7 @@ def create_review(file: UploadFile = File(...)) -> dict:
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(502, f"Ошибка проверки через Gemini. {exc}") from exc
 
-    return {
-        "document": filename,
-        "model": model,
-        "run_date": datetime.now().astimezone().isoformat(timespec="seconds"),
-        "agent_version": version("hihique-requirements-validator"),
-        **result,
-    }
+    return build_report(filename, model, result)
 
 
 app.mount("/", StaticFiles(directory=ROOT / "frontend", html=True), name="frontend")

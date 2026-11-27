@@ -14,6 +14,12 @@ class Reviewer:
 
 
 class ApiCoverageTests(unittest.TestCase):
+    def original_document(self, extension):
+        path = Path(__file__).resolve().parents[1] / "downloads" / "submission" / f"requirements.{extension}"
+        if not path.is_file():
+            self.skipTest(f"Для этого теста нужен файл организаторов: {path.name}")
+        return path
+
     def test_explicit_replacement_only_covers_writing_the_same_resource(self):
         declaration = "Экран читает сохранённую подписку. Изменения экран сохраняет через API."
         blocks = [{"text": "PUT /report-subscription заменяет сохранённую подписку."}]
@@ -44,10 +50,9 @@ class ApiCoverageTests(unittest.TestCase):
             list(check_api_coverage(blocks, Reviewer({"checks": response["checks"][:-1]})))
 
     def test_original_markdown_and_pdf_include_read_and_201(self):
-        root = Path(__file__).resolve().parents[1]
         inventories = []
         for extension in ("md", "pdf"):
-            blocks = read_document(root / "docs" / f"requirements.{extension}")
+            blocks = read_document(self.original_document(extension))
             items = api_checklist(api_review_blocks([b.to_dict() for b in blocks]))
             identities = [item.get("operation", item.get("status")) for item in items]
             self.assertIn("чтение", identities)
@@ -66,8 +71,7 @@ class ApiCoverageTests(unittest.TestCase):
         ], "B038", "B096")
 
     def assert_replayed_findings(self, extension, definitions, read_block, status_block):
-        root = Path(__file__).resolve().parents[1]
-        blocks = read_document(root / "docs" / f"requirements.{extension}")
+        blocks = read_document(self.original_document(extension))
         selected = api_review_blocks([b.to_dict() for b in blocks])
         response = {"checks": [
             {

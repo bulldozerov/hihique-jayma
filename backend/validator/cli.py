@@ -9,12 +9,13 @@ from dotenv import load_dotenv
 
 from .pipeline import run_review
 from .readers import read_document
+from .report import build_report, markdown_report
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path, help="Markdown or PDF specification")
-    parser.add_argument("--output", required=True, type=Path, help="Review JSON file")
+    parser.add_argument("--output", required=True, type=Path, help="Output Markdown (.md) or JSON (.json) file")
     parser.add_argument("--env-file", type=Path, default=Path(".env"))
     parser.add_argument(
         "--no-retries", action="store_true", help="Kept for compatibility. Retries are always disabled."
@@ -27,6 +28,9 @@ def main() -> None:
         parser.error("--max-blocks must be a positive integer")
     if args.output.resolve() == args.input.resolve():
         parser.error("The output file must differ from the input file")
+    output_format = args.output.suffix.lower()
+    if output_format not in {".md", ".json"}:
+        parser.error("Use .md or .json for the output file")
 
     load_dotenv(args.env_file)
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
@@ -43,7 +47,7 @@ def main() -> None:
             blocks = blocks[:args.max_blocks]
         with open_client(api_key) as client:
             result = run_review(blocks, GeminiReviewer(client, model))
-        output = {"document": args.input.name, "model": model, **result}
+        output = build_report(args.input.name, model, result)
         if len(blocks) < total_blocks:
             output["review_scope"] = {
                 "reviewed_blocks": len(blocks),
@@ -53,9 +57,12 @@ def main() -> None:
                 output["review_scope"]["last_line"] = blocks[-1].end_line
             else:
                 output["review_scope"]["last_page"] = blocks[-1].page
-        args.output.write_text(
-            json.dumps(output, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            output["summary"]["readiness"] = "Проверен только фрагмент. Готовность всего документа не оценивалась."
+        report_text = (
+            markdown_report(output) if output_format == ".md"
+            else json.dumps(output, ensure_ascii=False, indent=2) + "\n"
         )
+        args.output.write_text(report_text, encoding="utf-8")
     except (OSError, ValueError, RuntimeError) as exc:
         parser.exit(1, f"{exc}\n")
 

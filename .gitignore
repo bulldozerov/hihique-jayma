@@ -57,4 +57,7 @@ Thumbs.db
 # Local Gemini run artifacts
 /review-md-5.json
 /review-pdf-5.json
+/report.md
+/report.json
+/review.pdf
 /tests/benchmark/results/

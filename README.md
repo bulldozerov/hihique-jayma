@@ -1,43 +1,45 @@
-# hihique-jayma
-## Проверка ТЗ через Gemini
+# REQ//SCAN
 
-Из корня репозитория установите пакет бэкенда в активное Python окружение.
+REQ//SCAN проверяет технические задания через Gemini. Он показывает отдельные требования, замечания с цитатами из документа и результаты проверки критериев приёмки. Отчёт можно открыть в браузере или скачать в PDF и Markdown.
 
-```powershell
-python -m pip install -e ./backend
-Copy-Item .env.example .env
-```
+## Запуск на Windows
 
-Откройте корневой `.env` и укажите ключ из [Google AI Studio](https://aistudio.google.com/api-keys) в `GEMINI_API_KEY`. Модель можно заменить через `GEMINI_MODEL`. Переменные окружения имеют приоритет перед файлом. Для другого расположения файла передайте `--env-file`.
+Нужны Python 3.10 или новее и ключ Gemini. Выполните в PowerShell из корня репозитория:
 
 ```powershell
-review-requirements docs/requirements.pdf --output review.json
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ./backend
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
-Команда выполняет два прохода. Первый выделяет и проверяет отдельные требования, второй анализирует документ целиком. В JSON у исходных фрагментов PDF есть номера страниц и строки извлечённого текста на странице. Для Markdown можно передать `docs/requirements.md`, ссылки будут содержать номера строк исходного файла.
-
-PDF должен содержать текстовый слой. Извлечение текста можно проверить без ключа Gemini.
+Откройте `.env` и впишите свой ключ в `GEMINI_API_KEY`. Модель уже указана в `GEMINI_MODEL`. Ключ можно получить в [Google AI Studio](https://aistudio.google.com/api-keys).
 
 ```powershell
-parse-requirements docs/requirements.pdf --output pdf-blocks.json
+.\.venv\Scripts\python.exe -m uvicorn validator.api:app --host 127.0.0.1 --port 8003
 ```
 
-Для пробного прогона передайте число блоков через `--max-blocks`. Оба прохода
-будут анализировать только выбранный фрагмент с начала документа.
+## Прогон одной командой
+
+Укажите путь к ТЗ организаторов и путь для отчёта:
 
 ```powershell
-review-requirements docs/requirements.md --max-blocks 20 --output review-partial.json
+.\.venv\Scripts\review-requirements.exe "C:\путь\к\requirements.pdf" --output ".\report.md"
 ```
 
-Если документ был обрезан, поле `review_scope` в JSON содержит число
-проверенных блоков, общее число блоков и номер последней включённой страницы для PDF или строки для Markdown.
+Команда запишет русскоязычный отчёт в `report.md` в текущей папке. Для JSON укажите `--output .\report.json`. Веб-сервер для этой команды не нужен.
 
-## Веб-интерфейс
+## Проверка в браузере
 
-Из корня репозитория после установки зависимостей и настройки `.env`:
+1. Откройте [127.0.0.1:8003](http://127.0.0.1:8003/).
+2. Загрузите выданное организаторами ТЗ и нажмите «Запустить проверку».
+3. Откройте отчёт на сайте или скачайте его в PDF или Markdown.
+
+Поддерживаются PDF с текстовым слоем и Markdown. В браузере можно загружать файлы до 10 МБ. На полном ТЗ агент выполняет до пяти запросов. По умолчанию используется `gemini-3.5-flash-lite`.
+
+Для сдачи приложите исходное ТЗ и сформированный отчёт отдельно от ссылки на репозиторий.
+
+## Тесты без ключа
 
 ```powershell
-python -m uvicorn validator.api:app --host 127.0.0.1 --port 8000
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
-
-На http://127.0.0.1:8000/ доступен демонстрационный интерфейс. Для проверки через Gemini отправьте PDF с текстовым слоем или Markdown в `POST /api/reviews` как поле `file` формы `multipart/form-data`.
